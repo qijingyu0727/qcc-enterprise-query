@@ -42,22 +42,23 @@ class RunQueryTest(unittest.TestCase):
 
         self.assertEqual(result["mode"], "detail_api_selection")
         self.assertEqual(result["recommended_api"], "410")
-        self.assertIn("请确认本次查询方式", result["report_markdown"])
+        self.assertIn("企业已确认，请继续选择查询内容", result["report_markdown"])
 
-    def test_enhanced_request_requires_expensive_confirmation(self) -> None:
+    def test_enhanced_request_returns_selection_with_2001_recommendation(self) -> None:
         result = run_query.execute_query("杭州飞致云信息科技有限公司", "查人员规模和参保人数", client=object())
 
-        self.assertEqual(result["mode"], "expensive_confirmation")
-        self.assertEqual(result["detail_api"], "2001")
-        self.assertIn("费用相对更高", result["report_markdown"])
-        self.assertIn("确认查询", result["report_markdown"])
+        self.assertEqual(result["mode"], "detail_api_selection")
+        self.assertEqual(result["recommended_api"], "2001")
+        self.assertIn("相比工商信息，通常额外多出", result["report_markdown"])
+        self.assertIn("人员规模", result["report_markdown"])
+        self.assertIn("参保人数", result["report_markdown"])
 
     def test_selection_prompt_accepts_numeric_choices(self) -> None:
         result = run_query.execute_query("杭州飞致云信息科技有限公司", "查企业基本信息", client=object())
 
         self.assertIn("回复 `1`", result["report_markdown"])
         self.assertIn("回复 `2`", result["report_markdown"])
-        self.assertIn("再和你确认一次", result["report_markdown"])
+        self.assertIn("这类查询费用更高", result["report_markdown"])
 
     def test_full_company_name_with_410_calls_registration_details_only(self) -> None:
         registration_result = {
@@ -227,7 +228,23 @@ class RunQueryTest(unittest.TestCase):
         self.assertTrue(mock_fuzzy.called)
         self.assertEqual(result["mode"], "clarification")
         self.assertEqual([item["script"] for item in result["routes"]], ["fuzzy_search.py"])
-        self.assertIn("你确认企业全称后，我会再让你选择走 `410` 还是 `2001`", result["report_markdown"])
+        self.assertIn("请先只回复上面某个候选企业的完整名称", result["report_markdown"])
+        self.assertIn("我会单独罗列 `企业工商信息` 和 `企业信息核验` 的差异", result["report_markdown"])
+        self.assertNotIn("回复 `1`", result["report_markdown"])
+
+    def test_confirmed_company_after_fuzzy_flow_still_returns_selection_first(self) -> None:
+        result = run_query.execute_query(
+            "杭州飞致云信息科技有限公司",
+            "杭州飞致云信息科技有限公司",
+            client=object(),
+            original_request="查人员规模和参保人数",
+        )
+
+        self.assertEqual(result["mode"], "detail_api_selection")
+        self.assertEqual(result["request"], "查人员规模和参保人数")
+        self.assertEqual(result["recommended_api"], "2001")
+        self.assertIn("企业已确认，请继续选择查询内容", result["report_markdown"])
+        self.assertIn("额外多出", result["report_markdown"])
 
     def test_clue_query_routes_directly_to_fuzzy_search(self) -> None:
         fuzzy_result = {
@@ -305,6 +322,7 @@ class AgentPromptTest(unittest.TestCase):
         self.assertIn("choose 410 or 2001", content)
         self.assertIn("confirm again before calling 2001", content)
         self.assertIn("886", content)
+        self.assertIn("Do not skip the 410 or 2001 selection step", content)
 
 
 if __name__ == "__main__":

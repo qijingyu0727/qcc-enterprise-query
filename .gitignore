@@ -1,0 +1,31 @@
+# Local credentials
+.env
+.env.*
+!.env.example
+
+# Python cache / build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Test / tooling caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS files
+.DS_Store
+
+# Local planning / scratch files
+task_plan.md
+findings.md
+progress.md

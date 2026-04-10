@@ -152,6 +152,32 @@ DETAIL_API_SCRIPT_NAMES = {
     "410": "registration_details.py",
     "2001": "basic_details.py",
 }
+DETAIL_SELECTION_BASE_FIELDS = (
+    "企业名称",
+    "统一社会信用代码",
+    "法定代表人",
+    "登记状态",
+    "成立日期",
+    "注册资本",
+    "企业类型",
+    "注册地址",
+    "经营范围",
+    "营业期限",
+    "登记机关",
+    "核准日期",
+    "上市状态",
+)
+DETAIL_SELECTION_ENHANCED_FIELDS = (
+    "企业性质",
+    "人员规模",
+    "参保人数",
+    "国标行业",
+    "企查查行业",
+    "电话/更多电话",
+    "邮箱/更多邮箱",
+    "网址",
+    "曾用名",
+)
 DEFAULT_OVERVIEW_FIELDS = {
     "410": ("统一社会信用代码", "法定代表人", "登记状态", "注册资本", "经营范围"),
     "2001": ("统一社会信用代码", "法定代表人", "登记状态", "企业性质", "人员规模", "参保人数", "国标行业"),
@@ -415,6 +441,8 @@ def detail_api_selection_payload(company_name: str, user_request: str) -> dict[s
         "recommended_api": recommended_api,
         "recommended_title": DETAIL_API_TITLES[recommended_api],
         "recommendation_reason": reason,
+        "basic_scope_fields": list(DETAIL_SELECTION_BASE_FIELDS),
+        "enhanced_extra_fields": list(DETAIL_SELECTION_ENHANCED_FIELDS),
         "report_markdown": "",
     }
     payload["report_markdown"] = format_detail_api_selection_markdown(payload)
@@ -532,8 +560,6 @@ def execute_query(
         return report
 
     if not explicit_detail_api:
-        if requests_enhanced_verification(effective_request):
-            return expensive_confirmation_payload(company, effective_request)
         return detail_api_selection_payload(company, effective_request)
 
     if explicit_detail_api == "2001" and not expensive_confirmed:
@@ -636,19 +662,26 @@ def format_credential_required_markdown(payload: dict[str, Any]) -> str:
 
 
 def format_detail_api_selection_markdown(payload: dict[str, Any]) -> str:
-    lines = ["# 请确认本次查询方式", "", "已确认你提供的是企业全称或统一社会信用代码。查询前，我先帮你说明两种查询方式的区别。"]
-    lines.extend(["", "## 当前查询", ""])
+    basic_scope = "、".join(payload["basic_scope_fields"])
+    enhanced_scope = "、".join(payload["enhanced_extra_fields"])
+    lines = ["# 企业已确认，请继续选择查询内容", "", "这一步先只确认查询类型，我不会把企业确认和详情查询选择放在同一轮一起执行。"]
+    lines.extend(["", "## 当前确认企业", ""])
     lines.append(f"- 企业：`{payload['company_name']}`")
     lines.append(f"- 诉求：`{payload['request']}`")
-    lines.extend(["", "## 两种查询方式的区别", ""])
-    lines.append("- `1. 企业工商信息`：适合查看基础工商信息，通常可查询企业名称、统一社会信用代码、法定代表人、登记状态、成立日期、注册资本、企业类型、注册地址、经营范围、营业期限、登记机关、核准日期、上市状态等内容，成本更省。")
-    lines.append("- `2. 企业信息核验`：除基础主体信息外，还可额外提供人员规模、参保人数、国标行业、企业性质、联系方式、更多邮箱等核验字段，信息更完整，但费用更高。")
+    lines.extend(["", "## 1. 企业工商信息（410）", ""])
+    lines.append("- 适合先看基础工商主体信息，成本更省。")
+    lines.append(f"- 通常包含：{basic_scope}。")
+    lines.extend(["", "## 2. 企业信息核验（2001）", ""])
+    lines.append("- 会覆盖基础主体识别信息，并补充更完整的核验字段。")
+    lines.append(f"- 相比工商信息，通常额外多出：{enhanced_scope}。")
+    lines.append("- 这类查询费用更高，真正执行前我还会再和你确认一次。")
     lines.extend(["", "## 本次建议", ""])
     lines.append(f"- 推荐方式：`{payload['recommended_title']}`")
     lines.append(f"- 推荐原因：{payload['recommendation_reason']}")
-    lines.extend(["", "## 下一步", ""])
-    lines.append("- 回复 `1`，表示查询企业工商信息。")
-    lines.append("- 回复 `2`，表示查询企业信息核验；这类查询费用更高，我会在正式查询前再和你确认一次。")
+    lines.extend(["", "## 请你确认", ""])
+    lines.append("- 回复 `1` 或 `企业工商信息`，表示查询基础工商信息。")
+    lines.append("- 回复 `2` 或 `企业信息核验`，表示查询增强核验信息。")
+    lines.append("- 如果你选择 `2001`，我会先说明费用并请你再确认一次。")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -683,8 +716,8 @@ def format_clarification_markdown(payload: dict[str, Any]) -> str:
         lines.append(f"- {warning}")
 
     lines.extend(["", "## 下一步", ""])
-    lines.append("- 请直接回复上面某个候选企业的完整名称。")
-    lines.append("- 你确认企业全称后，我会再让你选择走 `410` 还是 `2001`。")
+    lines.append("- 请先只回复上面某个候选企业的完整名称。")
+    lines.append("- 企业确认完成后，我会单独罗列 `企业工商信息` 和 `企业信息核验` 的差异，再让你选择查询哪一种。")
     return "\n".join(lines).rstrip() + "\n"
 
 
