@@ -140,6 +140,18 @@ CLUE_REQUEST_KEYWORDS = (
     "线索",
     "关键词",
 )
+UPGRADE_REQUEST_KEYWORDS = (
+    "需要",
+    "要",
+    "需要更多信息",
+    "更多信息",
+    "更多字段",
+    "更详细",
+    "更完整",
+    "补充信息",
+    "补更多",
+    "查更多",
+)
 ADDRESS_HINTS = ("路", "街", "道", "号", "室", "栋", "层", "园区", "大厦")
 COMPANY_SUFFIXES = ("公司", "集团", "事务所", "学校", "医院", "研究院", "协会", "合作社", "银行", "中心", "厂")
 DETAIL_API_CHOICES = ("410", "2001")
@@ -320,6 +332,24 @@ def requests_enhanced_verification(user_request: str) -> bool:
     return any(keyword in request_text for keyword in ("人员规模", "参保人数", "联系信息", "联系方式", "更多邮箱", "国标行业", "企业性质"))
 
 
+def is_upgrade_follow_up_request(user_request: str) -> bool:
+    request_text = compact_text(user_request)
+    if request_text in UPGRADE_REQUEST_KEYWORDS:
+        return True
+    return any(keyword in request_text for keyword in ("更多信息", "更详细", "更完整", "补充", "升级"))
+
+
+def should_default_basic_query(user_request: str) -> bool:
+    request_text = compact_text(user_request)
+    if not request_text:
+        return False
+    if is_upgrade_follow_up_request(request_text):
+        return False
+    if requests_enhanced_verification(request_text):
+        return False
+    return wants_detail_lookup(request_text)
+
+
 def is_expensive_query_confirmed(user_request: str, confirm_expensive: bool = False) -> bool:
     if confirm_expensive:
         return True
@@ -456,10 +486,11 @@ def detail_api_selection_payload(company_name: str, user_request: str) -> dict[s
 
 
 def expensive_confirmation_payload(company_name: str, user_request: str) -> dict[str, Any]:
+    request_text = compact_text(user_request) or "补充更多信息"
     payload = {
         "mode": "expensive_confirmation",
         "company_name": company_name,
-        "request": user_request,
+        "request": request_text,
         "detail_api": "2001",
         "detail_title": DETAIL_API_TITLES["2001"],
         "report_markdown": "",
@@ -529,8 +560,14 @@ def execute_query(
         raise QccApiError("缺少企业全称或搜索关键词，请补充后再查询。")
 
     explicit_detail_api = infer_requested_detail_api(request_text, detail_api=detail_api)
+    is_upgrade_follow_up = is_upgrade_follow_up_request(request_text)
     expensive_confirmed = is_expensive_query_confirmed(request_text, confirm_expensive=confirm_expensive)
+    if is_upgrade_follow_up:
+        expensive_confirmed = True
     original_explicit_api = infer_requested_detail_api(effective_request)
+
+    if not explicit_detail_api and original_explicit_api:
+        explicit_detail_api = original_explicit_api
 
     if not explicit_detail_api and expensive_confirmed:
         if original_explicit_api == "2001" or requests_enhanced_verification(effective_request) or confirm_expensive:
@@ -565,8 +602,16 @@ def execute_query(
         report["report_markdown"] = format_query_report(report)
         return report
 
+    if not explicit_detail_api and is_upgrade_follow_up:
+        explicit_detail_api = "2001"
+
     if not explicit_detail_api:
-        return detail_api_selection_payload(company, effective_request)
+        if requests_enhanced_verification(effective_request):
+            return expensive_confirmation_payload(company, effective_request)
+        if should_default_basic_query(effective_request):
+            explicit_detail_api = "410"
+        else:
+            return detail_api_selection_payload(company, effective_request)
 
     if explicit_detail_api == "2001" and not expensive_confirmed:
         return expensive_confirmation_payload(company, effective_request)
@@ -643,9 +688,10 @@ def format_capability_markdown() -> str:
     lines.append("- `2. 企业信息核验`：可额外补充人员规模、参保人数、国标行业、联系方式、更多邮箱等增强字段，但费用更高。")
     lines.append("- `3. 企业模糊搜索`：可按企业简称、电话、地址、人名、产品名、经营范围等关键词返回候选企业。")
     lines.extend(["", "## 输入如何路由", ""])
-    lines.append("- 只给了简称、电话、地址或其他线索：先走企业模糊搜索，确认企业全称后再选 `1` 或 `2`。")
-    lines.append("- 已给出企业全称或统一社会信用代码：先说明两种详情查询的差异并让用户选择，然后再查详情。")
-    lines.append("- 用户已明确说“查企业工商信息”：可直接查详情；如明确说“查企业信息核验”或诉求命中增强字段，则先确认费用，再查详情。")
+    lines.append("- 只给了简称、电话、地址或其他线索：先走企业模糊搜索，确认企业全称后，默认先返回基础工商信息。")
+    lines.append("- 已给出企业全称或统一社会信用代码，且只是泛查询：默认直接返回 `1. 企业工商信息`。")
+    lines.append("- 如果还想补人员规模、参保人数、行业、联系方式等信息，可以在基础结果后直接回复 `需要`；这类继续查询可能会消耗较高费用。")
+    lines.append("- 用户已明确说“查企业信息核验”，或诉求命中增强字段时：直接进入高价查询确认，确认后再执行。")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -705,7 +751,7 @@ def format_expensive_confirmation_markdown(payload: dict[str, Any]) -> str:
 
 
 def format_clarification_markdown(payload: dict[str, Any]) -> str:
-    lines = ["# 需要先确认目标企业", "", "当前输入还不能直接当成最终企业全称使用，我先按 `886 企业模糊搜索` 找到了候选企业。"]
+    lines = ["# 需要先确认目标企业", "", "当前输入还不能直接当成最终企业全称使用，我先按企业模糊搜索找到了候选企业。"]
 
     lines.extend(["", "## 候选企业", ""])
     lines.extend(build_candidates_table(payload["candidates"]))
@@ -722,7 +768,8 @@ def format_clarification_markdown(payload: dict[str, Any]) -> str:
 
     lines.extend(["", "## 下一步", ""])
     lines.append("- 你要查哪一家？直接回企业全称或者第几个就行。")
-    lines.append("- 企业确认完成后，我会单独罗列 `1. 企业工商信息` 和 `2. 企业信息核验` 的差异，再让你选择查询哪一种。")
+    lines.append("- 如果你的诉求只是“查企业信息”这类泛查询，企业确认后我会默认先返回基础工商信息。")
+    lines.append("- 如果你本来就想补人员规模、参保人数、行业、联系方式等信息，后面可以继续升级查询；这类结果可能会消耗较高费用。")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -734,12 +781,12 @@ def build_follow_up_suggestions(report: dict[str, Any]) -> list[str]:
     if detail:
         if detail_api == "410":
             return [
-                "如果你后续还要补充人员规模、参保人数、国标行业、联系方式或更多邮箱，可以改用第 `2` 种查询再查一次。",
+                "如果你还想继续补充人员规模、参保人数、行业、联系方式等信息，可以直接回复 `需要`；继续查询可能会消耗较高费用。",
                 "如果你要，我也可以下一步继续帮你查其他企业，比如 `小米科技有限责任公司`。",
             ]
         return ["如果你要，我可以下一步继续帮你查其他企业，比如 `小米科技有限责任公司`。"]
     if candidates:
-        return ["请直接回复其中一家候选企业的完整名称，或者直接回第几个；选中后我会继续让你选择 `1` 或 `2`。"]
+        return ["请直接回复其中一家候选企业的完整名称，或者直接回第几个；选中后我会继续帮你往下查。"]
     return ["建议补充更准确的企业全称，或改用电话、地址、人名、产品名、经营范围等线索后重试。"]
 
 

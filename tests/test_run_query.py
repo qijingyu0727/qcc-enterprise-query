@@ -37,30 +37,51 @@ class RunQueryTest(unittest.TestCase):
         self.assertEqual(result["mode"], "credential_required")
         self.assertIn("需要先配置企查查凭证", result["report_markdown"])
 
-    def test_full_company_name_without_selected_api_returns_selection(self) -> None:
-        result = run_query.execute_query("杭州飞致云信息科技有限公司", "查企业基本信息", client=object())
+    def test_full_company_name_without_selected_api_defaults_to_basic_query(self) -> None:
+        registration_result = {
+            "api_title": "企业工商信息",
+            "query": {"company_name": "杭州飞致云信息科技有限公司"},
+            "has_result": True,
+            "result": {
+                "企业名称": "杭州飞致云信息科技有限公司",
+                "统一社会信用代码": "91330106311245339J",
+                "法定代表人": "阮志敏",
+                "登记状态": "存续",
+            },
+        }
+        with mock.patch("run_query.query_registration_details", return_value=registration_result) as mock_registration, mock.patch(
+            "run_query.query_basic_details", side_effect=AssertionError("should not call")
+        ):
+            result = run_query.execute_query("杭州飞致云信息科技有限公司", "查企业基本信息", client=object())
 
-        self.assertEqual(result["mode"], "detail_api_selection")
-        self.assertEqual(result["recommended_api"], "410")
-        self.assertIn("企业已确认，请继续选择查询内容", result["report_markdown"])
+        self.assertTrue(mock_registration.called)
+        self.assertEqual(result["mode"], "query")
+        self.assertEqual(result["detail_api"], "410")
+        self.assertIn("如果你还想继续补充人员规模、参保人数、行业、联系方式等信息", result["report_markdown"])
 
-    def test_enhanced_request_returns_selection_with_2001_recommendation(self) -> None:
+    def test_enhanced_request_requires_expensive_confirmation(self) -> None:
         result = run_query.execute_query("杭州飞致云信息科技有限公司", "查人员规模和参保人数", client=object())
 
-        self.assertEqual(result["mode"], "detail_api_selection")
-        self.assertEqual(result["recommended_api"], "2001")
-        self.assertIn("相比工商信息，通常额外多出", result["report_markdown"])
-        self.assertIn("人员规模", result["report_markdown"])
-        self.assertIn("参保人数", result["report_markdown"])
+        self.assertEqual(result["mode"], "expensive_confirmation")
+        self.assertEqual(result["detail_api"], "2001")
+        self.assertIn("你选的是企业信息核验", result["report_markdown"])
 
-    def test_selection_prompt_accepts_numeric_choices(self) -> None:
-        result = run_query.execute_query("杭州飞致云信息科技有限公司", "查企业基本信息", client=object())
+    def test_basic_query_report_suggests_reply_need_for_more_info(self) -> None:
+        registration_result = {
+            "api_title": "企业工商信息",
+            "query": {"company_name": "杭州飞致云信息科技有限公司"},
+            "has_result": True,
+            "result": {
+                "企业名称": "杭州飞致云信息科技有限公司",
+                "统一社会信用代码": "91330106311245339J",
+            },
+        }
+        with mock.patch("run_query.query_registration_details", return_value=registration_result):
+            result = run_query.execute_query("杭州飞致云信息科技有限公司", "查企业基本信息", client=object())
 
-        self.assertIn("回复 `1`", result["report_markdown"])
-        self.assertIn("回复 `2`", result["report_markdown"])
-        self.assertIn("这类查询费用更高", result["report_markdown"])
-        self.assertNotIn("410", result["report_markdown"])
-        self.assertNotIn("2001", result["report_markdown"])
+        self.assertIn("直接回复 `需要`", result["report_markdown"])
+        self.assertIn("可能会消耗较高费用", result["report_markdown"])
+        self.assertNotIn("回复 `1`", result["report_markdown"])
 
     def test_full_company_name_with_410_calls_registration_details_only(self) -> None:
         registration_result = {
@@ -216,6 +237,24 @@ class RunQueryTest(unittest.TestCase):
         self.assertTrue(mock_basic.called)
         self.assertEqual(result["detail_api"], "2001")
 
+    def test_need_after_basic_query_executes_2001_directly(self) -> None:
+        basic_result = {
+            "api_title": "企业信息核验",
+            "query": {"company_name": "企查查科技股份有限公司"},
+            "has_result": True,
+            "result": {
+                "企业名称": "企查查科技股份有限公司",
+                "人员规模": "100-499人",
+            },
+        }
+        with mock.patch("run_query.query_basic_details", return_value=basic_result) as mock_basic:
+            result = run_query.execute_query("企查查科技股份有限公司", "需要", client=object())
+
+        self.assertTrue(mock_basic.called)
+        self.assertEqual(result["mode"], "query")
+        self.assertEqual(result["detail_api"], "2001")
+        self.assertIn("人员规模：**100-499人**", result["report_markdown"])
+
     def test_partial_name_goes_to_fuzzy_search_first(self) -> None:
         fuzzy_result = {
             "api_title": "企业模糊搜索",
@@ -234,25 +273,35 @@ class RunQueryTest(unittest.TestCase):
         self.assertEqual(result["mode"], "clarification")
         self.assertEqual([item["script"] for item in result["routes"]], ["fuzzy_search.py"])
         self.assertIn("你要查哪一家？直接回企业全称或者第几个就行", result["report_markdown"])
-        self.assertIn("我会单独罗列 `1. 企业工商信息` 和 `2. 企业信息核验` 的差异", result["report_markdown"])
+        self.assertIn("企业确认后我会默认先返回基础工商信息", result["report_markdown"])
         self.assertNotIn("回复 `1`", result["report_markdown"])
         self.assertIn("| 序号 | 企业名称 |", result["report_markdown"])
         self.assertIn("| 1 | 杭州飞致云信息科技有限公司 |", result["report_markdown"])
 
-    def test_confirmed_company_after_fuzzy_flow_still_returns_selection_first(self) -> None:
-        result = run_query.execute_query(
-            "杭州飞致云信息科技有限公司",
-            "杭州飞致云信息科技有限公司",
-            client=object(),
-            original_request="查人员规模和参保人数",
-        )
+    def test_confirmed_company_after_fuzzy_flow_defaults_to_basic_query(self) -> None:
+        registration_result = {
+            "api_title": "企业工商信息",
+            "query": {"company_name": "杭州飞致云信息科技有限公司"},
+            "has_result": True,
+            "result": {
+                "企业名称": "杭州飞致云信息科技有限公司",
+                "统一社会信用代码": "91330106311245339J",
+            },
+        }
+        with mock.patch("run_query.query_registration_details", return_value=registration_result) as mock_registration, mock.patch(
+            "run_query.query_basic_details", side_effect=AssertionError("should not call")
+        ):
+            result = run_query.execute_query(
+                "杭州飞致云信息科技有限公司",
+                "杭州飞致云信息科技有限公司",
+                client=object(),
+                original_request="查一下杭州飞致云的企业信息",
+            )
 
-        self.assertEqual(result["mode"], "detail_api_selection")
-        self.assertEqual(result["request"], "查人员规模和参保人数")
-        self.assertEqual(result["recommended_api"], "2001")
-        self.assertIn("企业已确认，请继续选择查询内容", result["report_markdown"])
-        self.assertIn("额外多出", result["report_markdown"])
-        self.assertNotIn("2001", result["report_markdown"])
+        self.assertTrue(mock_registration.called)
+        self.assertEqual(result["mode"], "query")
+        self.assertEqual(result["detail_api"], "410")
+        self.assertIn("直接回复 `需要`", result["report_markdown"])
 
     def test_clue_query_routes_directly_to_fuzzy_search(self) -> None:
         fuzzy_result = {
@@ -331,12 +380,16 @@ class AgentPromptTest(unittest.TestCase):
         prompt_file = Path(__file__).resolve().parents[1] / "agents" / "openai.yaml"
         content = prompt_file.read_text(encoding="utf-8")
         self.assertIn("ask the user for QCC Key and QCC SecretKey", content)
-        self.assertIn("persist them into qcc-enterprise-query/.env", content)
-        self.assertIn("choose 1 or 2", content)
-        self.assertIn("use this confirmation wording", content)
+        self.assertIn("persist them into", content)
+        self.assertIn("qcc-enterprise-query/.env", content)
+        self.assertIn("Default to 企业工商信息 and return that result directly", content)
+        self.assertIn("reply 需要", content)
+        self.assertIn("use this", content)
+        self.assertIn("confirmation wording", content)
         self.assertIn("如果确认继续，请直接回复 确认", content)
         self.assertIn("fuzzy search", content)
-        self.assertIn("Do not expose internal API ids such as 410 or 2001 to the user", content)
+        self.assertIn("Do not expose", content)
+        self.assertIn("internal API ids to the user", content)
         self.assertIn("第二个", content)
 
 

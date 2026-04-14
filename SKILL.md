@@ -1,6 +1,6 @@
 ---
 name: qcc-enterprise-query
-description: Query enterprise information through QCC public APIs with reusable local credential storage, candidate confirmation, and selectable detail lookup. Use when the user wants QCC/企查查 enterprise lookup, credential setup for the QCC skill, fuzzy company search, or enterprise registration/verification details by company full name or keyword.
+description: Query enterprise information through QCC public APIs with reusable local credential storage, candidate confirmation, and progressive detail lookup. Use when the user wants QCC/企查查 enterprise lookup, credential setup for the QCC skill, fuzzy company search, or enterprise registration/verification details by company full name or keyword.
 ---
 
 # QCC Enterprise Query
@@ -20,15 +20,15 @@ description: Query enterprise information through QCC public APIs with reusable 
 5. 如果用户只给了简称、电话、地址、人名、产品名、经营范围等线索，先调用 `scripts/fuzzy_search.py`。
 6. `fuzzy_search.py` 返回候选企业后，先让用户确认完整企业全称；确认前不要直接查详情接口。
 7. 候选企业列表要带序号；用户回复企业全称，或回复 `2 / 第二个 / 第2个` 这类序号选择时，都视为已经选中目标企业，直接进入下一步，不要再额外追问“是否确认”。
-8. 用户确认完整企业全称后，再说明 `1. 企业工商信息` 和 `2. 企业信息核验` 的区别，并让用户选择其一。
-9. 如果用户一开始就给了完整企业全称或统一社会信用代码，也不要直接查详情；先让用户选择 `1` 或 `2`。
-10. 企业全称确认完成后，再单独说明 `1` 和 `2` 的区别，不要把“企业确认”和“查询类型确认”放到同一轮里。
-11. 说明查询类型时，要明确讲清：
-   `1. 企业工商信息` 通常包含哪些基础工商字段；
-   `2. 企业信息核验` 在此基础上额外多出哪些增强字段。
-12. 只要即将调用第 `2` 种查询，都必须先提示这类查询费用更高，并做一次二次确认；用户确认后，才调用 `scripts/basic_details.py`。
-13. 用户已明确说“查企业工商信息”时，可直接调用 `scripts/registration_details.py`；用户已明确说“查企业信息核验”时，也先走费用确认，再调用 `scripts/basic_details.py`。
-14. 默认推荐第 `1` 种；如果诉求涉及 `人员规模 / 参保人数 / 联系方式 / 更多邮箱 / 国标行业 / 企业性质` 等增强字段，明确推荐第 `2` 种，但仍要先做 `1/2` 选择说明。
+8. 用户确认完整企业全称后，如果原始诉求只是泛查询（如“查企业信息 / 查一下企业 / 查下基本信息”），默认先返回第 `1` 种企业工商信息结果。
+9. 如果用户一开始就给了完整企业全称或统一社会信用代码，且诉求是泛查询，也默认直接先查第 `1` 种，不再先做类型选择。
+10. 返回第 `1` 种结果后，要继续提示：
+   如果还想补人员规模、参保人数、行业、联系方式等信息，可以直接回复 `需要`，但这类继续查询可能会消耗较高费用。
+11. 如果用户直接要求 `人员规模 / 参保人数 / 联系方式 / 更多邮箱 / 国标行业 / 企业性质` 等增强字段，则进入第 `2` 种查询的费用确认。
+12. 如果用户是在基础结果后回复 `需要`，则直接调用 `scripts/basic_details.py`，不再额外二次确认。
+13. 如果用户是一开始就明确要求增强字段，才先提示这类查询费用更高，并做一次确认；用户确认后，再调用 `scripts/basic_details.py`。
+14. 用户已明确说“查企业工商信息”时，可直接调用 `scripts/registration_details.py`；用户已明确说“查企业信息核验”时，也先走费用确认，再调用 `scripts/basic_details.py`。
+15. 默认推荐并默认执行第 `1` 种；只有诉求明确需要增强字段时，才升级到第 `2` 种。
 
 ## 能力介绍话术
 
@@ -38,7 +38,7 @@ description: Query enterprise information through QCC public APIs with reusable 
   适合基础工商信息查询，可返回企业名称、统一社会信用代码、法定代表人、登记状态、成立日期、注册资本、企业类型、所属地区、注册地址、经营范围、营业期限、登记机关、核准日期、上市状态等。
 - `2. 企业信息核验`
   适合增强核验查询，在基础主体信息之外，还可补充企业性质、人员规模(PersonScope)、参保人数、国标行业、企查查行业、电话、更多电话、邮箱、更多邮箱、网址、曾用名等。
-- `886 企业模糊搜索`
+- `3. 企业模糊搜索`
   适合企业识别和线索定位，可根据企业简称、电话、地址、人名、产品名、经营范围等关键词返回候选企业。
 
 ## 路由规则
@@ -49,10 +49,12 @@ description: Query enterprise information through QCC public APIs with reusable 
   调用 `scripts/fuzzy_search.py`。
 - `fuzzy_search.py` 返回候选企业后：
   先让用户确认具体企业全称，再继续下一步。
-- 用户已给出完整企业全称或统一社会信用代码，但没有明确接口：
-  不直接查详情，先让用户在 `1` 和 `2` 之间做选择。
+- 用户已给出完整企业全称或统一社会信用代码，且只是泛查询：
+  默认直接返回第 `1` 种企业工商信息。
 - 用户直接要求增强字段，但还没有明确选第 `2` 种：
-  先返回 `1/2` 差异说明，并明确推荐第 `2` 种。
+  直接返回费用确认提示，确认后执行第 `2` 种查询。
+- 用户在基础结果后回复 `需要`：
+  直接执行第 `2` 种查询，不再额外确认。
 - 用户已经选择/明确指定第 `2` 种：
   再返回费用确认提示，并要求用户回复 `确认` 后再执行。
 - 用户已明确选第 `1` 种：
@@ -66,14 +68,14 @@ description: Query enterprise information through QCC public APIs with reusable 
 
 - 默认返回详细 Markdown 报告。
 - 无凭证时，先返回凭证配置提示，不查接口。
-- 需要选详情接口时，先返回 `1/2` 差异说明和推荐项，不直接查详情。
+- 只有在用户明确要求解释差异时，才返回 `1/2` 差异说明。
 - 即将执行第 `2` 种查询时，先返回费用确认提示，不直接查详情。
 - 候选企业确认阶段，最多展示前 5 条，优先用表格展示。
 - 候选企业表格需要带 `序号` 列，方便用户直接回复“第几个”。
 - 默认查“企业信息 / 基本信息 / 工商信息”时：
-  推荐第 `1` 种。
+  直接返回第 `1` 种结果。
 - 查 `人员规模 / 参保人数 / 联系方式 / 更多邮箱 / 国标行业 / 企业性质` 等增强字段时：
-  推荐第 `2` 种，但仍先让用户确认查哪一种。
+  直接进入第 `2` 种查询确认。
 - 第 `2` 种默认返回完整增强字段报告。
 - 第 `1` 种返回基础工商信息报告。
 - 如果用户选了第 `1` 种却要查第 `2` 种才有的增强字段，要明确提示可改用第 `2` 种。
@@ -81,16 +83,15 @@ description: Query enterprise information through QCC public APIs with reusable 
 - 候选企业确认提示要明确写成：
   `你要查哪一家？直接回企业全称或者第几个就行。`
 - 用户回复 `2 / 第二个 / 第2个` 这类序号选择时，直接按对应候选企业进入下一步，不再重复确认企业。
-- 进入查询类型选择阶段时，要明确告诉用户：
-  `1. 企业工商信息` 通常包含企业名称、统一社会信用代码、法定代表人、登记状态、成立日期、注册资本、企业类型、注册地址、经营范围、营业期限、登记机关、核准日期、上市状态等。
-  `2. 企业信息核验` 在此基础上还可额外补充企业性质、人员规模、参保人数、国标行业、企查查行业、电话、更多电话、邮箱、更多邮箱、网址、曾用名等。
+- 基础结果返回后，要明确告诉用户：
+  `如果你还想继续补充人员规模、参保人数、行业、联系方式等信息，可以直接回复 需要；继续查询可能会消耗较高费用。`
 - 进入第 `2` 种确认阶段时，要明确告诉用户：
   `你选的是企业信息核验。`
   `这个查询费用较高。`
   如确认继续，请回复 `确认`；
   如无需查询参保人数、邮箱电话等信息，可回复 `企业工商信息` 或 `1` 改查基础工商信息。
 - 查询完成后的“后续建议”只能提当前 skill 已支持的能力：
-  可以建议继续查别的企业，或在 `1/2` 之间切换补充字段；
+  可以建议继续查别的企业，或补充更多支持的增强字段；
   不要提 `股东信息 / 对外投资 / 司法风险 / 历史变更` 等当前未封装能力。
 
 ## 本地命令
@@ -131,16 +132,10 @@ python3 /Users/qixiaoc/Code/fit2cloud/QCC-skill/qcc-enterprise-query/scripts/fuz
 python3 /Users/qixiaoc/Code/fit2cloud/QCC-skill/qcc-enterprise-query/scripts/run_query.py --company-name "企查查科技股份有限公司" --request "查企业信息"
 ```
 
-明确指定详情接口：
-
-```bash
-python3 /Users/qixiaoc/Code/fit2cloud/QCC-skill/qcc-enterprise-query/scripts/run_query.py --company-name "企查查科技股份有限公司" --request "查企业信息" --detail-api 2001
-```
-
 确认继续执行第 `2` 种查询：
 
 ```bash
-python3 /Users/qixiaoc/Code/fit2cloud/QCC-skill/qcc-enterprise-query/scripts/run_query.py --company-name "企查查科技股份有限公司" --request "确认" --detail-api 2001 --confirm-expensive --original-request "查企业信息"
+python3 /Users/qixiaoc/Code/fit2cloud/QCC-skill/qcc-enterprise-query/scripts/basic_details.py --company-name "企查查科技股份有限公司"
 ```
 
 ## 参考文件
