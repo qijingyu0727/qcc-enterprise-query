@@ -20,9 +20,9 @@ class RunQueryTest(unittest.TestCase):
             result = run_query.execute_query(None, "这个 skill 能干嘛")
 
         self.assertEqual(result["mode"], "capability")
-        self.assertIn("410 企业工商信息", result["report_markdown"])
-        self.assertIn("2001 企业信息核验", result["report_markdown"])
-        self.assertIn("886 企业模糊搜索", result["report_markdown"])
+        self.assertIn("1. 企业工商信息", result["report_markdown"])
+        self.assertIn("2. 企业信息核验", result["report_markdown"])
+        self.assertIn("3. 企业模糊搜索", result["report_markdown"])
 
     def test_missing_credentials_returns_credential_required(self) -> None:
         fake_status = {
@@ -59,6 +59,8 @@ class RunQueryTest(unittest.TestCase):
         self.assertIn("回复 `1`", result["report_markdown"])
         self.assertIn("回复 `2`", result["report_markdown"])
         self.assertIn("这类查询费用更高", result["report_markdown"])
+        self.assertNotIn("410", result["report_markdown"])
+        self.assertNotIn("2001", result["report_markdown"])
 
     def test_full_company_name_with_410_calls_registration_details_only(self) -> None:
         registration_result = {
@@ -232,7 +234,7 @@ class RunQueryTest(unittest.TestCase):
         self.assertEqual(result["mode"], "clarification")
         self.assertEqual([item["script"] for item in result["routes"]], ["fuzzy_search.py"])
         self.assertIn("你要查哪一家？直接回企业全称或者第几个就行", result["report_markdown"])
-        self.assertIn("我会单独罗列 `企业工商信息` 和 `企业信息核验` 的差异", result["report_markdown"])
+        self.assertIn("我会单独罗列 `1. 企业工商信息` 和 `2. 企业信息核验` 的差异", result["report_markdown"])
         self.assertNotIn("回复 `1`", result["report_markdown"])
         self.assertIn("| 序号 | 企业名称 |", result["report_markdown"])
         self.assertIn("| 1 | 杭州飞致云信息科技有限公司 |", result["report_markdown"])
@@ -250,6 +252,7 @@ class RunQueryTest(unittest.TestCase):
         self.assertEqual(result["recommended_api"], "2001")
         self.assertIn("企业已确认，请继续选择查询内容", result["report_markdown"])
         self.assertIn("额外多出", result["report_markdown"])
+        self.assertNotIn("2001", result["report_markdown"])
 
     def test_clue_query_routes_directly_to_fuzzy_search(self) -> None:
         fuzzy_result = {
@@ -320,7 +323,7 @@ class RunQueryTest(unittest.TestCase):
         ), mock.patch("run_query.query_fuzzy_search", side_effect=AssertionError("should not call")):
             result = run_query.execute_query("杭州飞致云信息科技有限公司", "查参保人数", client=object(), detail_api="410")
 
-        self.assertIn("建议改用 2001 企业信息核验", result["report_markdown"])
+        self.assertIn("建议改用第 `2` 种查询", result["report_markdown"])
 
 
 class AgentPromptTest(unittest.TestCase):
@@ -329,11 +332,11 @@ class AgentPromptTest(unittest.TestCase):
         content = prompt_file.read_text(encoding="utf-8")
         self.assertIn("ask the user for QCC Key and QCC SecretKey", content)
         self.assertIn("persist them into qcc-enterprise-query/.env", content)
-        self.assertIn("choose 410 or 2001", content)
+        self.assertIn("choose 1 or 2", content)
         self.assertIn("use this confirmation wording", content)
         self.assertIn("如果确认继续，请直接回复 确认", content)
-        self.assertIn("886", content)
-        self.assertIn("Do not skip the 410 or 2001 selection step", content)
+        self.assertIn("fuzzy search", content)
+        self.assertIn("Do not expose internal API ids such as 410 or 2001 to the user", content)
         self.assertIn("第二个", content)
 
 

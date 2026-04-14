@@ -306,10 +306,10 @@ def recommend_detail_api(user_request: str) -> tuple[str, str]:
     requested_fields = extract_requested_detail_fields(user_request)
     request_text = compact_text(user_request)
     if any(field in ENHANCED_ONLY_FIELDS for field in requested_fields):
-        return "2001", "你这次诉求涉及人员规模、参保人数、联系方式、更多邮箱或行业增强字段，2001 更合适。"
+        return "2001", "你这次诉求涉及人员规模、参保人数、联系方式、更多邮箱或行业增强字段，更适合第 2 种查询。"
     if any(keyword in request_text for keyword in ("人员规模", "参保人数", "联系信息", "联系方式", "更多邮箱", "国标行业", "企业性质")):
-        return "2001", "你这次诉求更偏增强核验字段，建议直接使用 2001 企业信息核验。"
-    return "410", "这次更像基础主体/工商信息查询，优先推荐成本更省的 410 企业工商信息。"
+        return "2001", "你这次诉求更偏增强核验字段，建议直接使用第 2 种查询。"
+    return "410", "这次更像基础主体/工商信息查询，优先推荐成本更省的第 1 种查询。"
 
 
 def requests_enhanced_verification(user_request: str) -> bool:
@@ -386,6 +386,12 @@ def route_step(script_name: str, output: dict[str, Any], note: str) -> dict[str,
     }
 
 
+def detail_api_display_name(detail_api: str) -> str:
+    if detail_api == "410":
+        return "第1种企业工商信息"
+    return "第2种企业信息核验"
+
+
 def build_empty_detail_result(company_name: str, detail_api: str) -> dict[str, Any]:
     return {
         "api_title": DETAIL_API_TITLES[detail_api],
@@ -401,18 +407,18 @@ def capability_payload() -> dict[str, Any]:
         "report_markdown": format_capability_markdown(),
         "capabilities": [
             {
+                "序号": "1",
                 "接口": "企业工商信息",
-                "接口编号": "410",
                 "用途": "精确查询企业基础工商主体信息，字段较基础，成本更省",
             },
             {
+                "序号": "2",
                 "接口": "企业信息核验",
-                "接口编号": "2001",
                 "用途": "精确查询增强版主体核验详情，可补充人员规模、参保人数、国标行业、联系方式、更多邮箱等，费用更高",
             },
             {
+                "序号": "3",
                 "接口": "企业模糊搜索",
-                "接口编号": "886",
                 "用途": "按企业简称、电话、地址、人名、产品名、经营范围等关键词定位候选企业",
             },
         ],
@@ -498,7 +504,7 @@ def build_unavailable_field_warning(user_request: str, detail_api: str) -> str:
         unsupported_text = "、".join(unsupported)
         return (
             f"当前使用的是 {DETAIL_API_TITLES[detail_api]}，未返回字段：{unsupported_text}。"
-            f"如需这些增强字段，建议改用 2001 企业信息核验。"
+            "如需这些增强字段，建议改用第 `2` 种查询。"
         )
     return ""
 
@@ -577,7 +583,7 @@ def execute_query(
         route_step(
             DETAIL_API_SCRIPT_NAMES[explicit_detail_api],
             detail_result,
-            f"已按你的选择调用 {explicit_detail_api} {DETAIL_API_TITLES[explicit_detail_api]}。",
+            f"已按你的选择调用{detail_api_display_name(explicit_detail_api)}。",
         )
     )
 
@@ -633,13 +639,13 @@ def format_capability_markdown() -> str:
     lines.append("- 首次使用前需要提供 `QCC Key` 和 `QCC SecretKey`。")
     lines.append("- skill 会先将凭证写入 `qcc-enterprise-query/.env`，后续复用且不会自动删除。")
     lines.extend(["", "## 可用能力", ""])
-    lines.append("- `410 企业工商信息`：基础工商信息字段较基础，成本更省，适合常规主体信息查询。")
-    lines.append("- `2001 企业信息核验`：可额外补充人员规模、参保人数、国标行业、联系方式、更多邮箱等增强字段，但费用更高。")
-    lines.append("- `886 企业模糊搜索`：可按企业简称、电话、地址、人名、产品名、经营范围等关键词返回候选企业。")
+    lines.append("- `1. 企业工商信息`：基础工商信息字段较基础，成本更省，适合常规主体信息查询。")
+    lines.append("- `2. 企业信息核验`：可额外补充人员规模、参保人数、国标行业、联系方式、更多邮箱等增强字段，但费用更高。")
+    lines.append("- `3. 企业模糊搜索`：可按企业简称、电话、地址、人名、产品名、经营范围等关键词返回候选企业。")
     lines.extend(["", "## 输入如何路由", ""])
-    lines.append("- 只给了简称、电话、地址或其他线索：先走 `886`，确认企业全称后再选 `410` 或 `2001`。")
-    lines.append("- 已给出企业全称或统一社会信用代码：先说明 `410/2001` 差异并让用户选择，然后再查详情。")
-    lines.append("- 用户已明确说“用 410”：可直接查详情；如明确说“用 2001”或诉求命中增强字段，则先确认费用，再查详情。")
+    lines.append("- 只给了简称、电话、地址或其他线索：先走企业模糊搜索，确认企业全称后再选 `1` 或 `2`。")
+    lines.append("- 已给出企业全称或统一社会信用代码：先说明两种详情查询的差异并让用户选择，然后再查详情。")
+    lines.append("- 用户已明确说“查企业工商信息”：可直接查详情；如明确说“查企业信息核验”或诉求命中增强字段，则先确认费用，再查详情。")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -668,10 +674,10 @@ def format_detail_api_selection_markdown(payload: dict[str, Any]) -> str:
     lines.extend(["", "## 当前确认企业", ""])
     lines.append(f"- 企业：`{payload['company_name']}`")
     lines.append(f"- 诉求：`{payload['request']}`")
-    lines.extend(["", "## 1. 企业工商信息（410）", ""])
+    lines.extend(["", "## 1. 企业工商信息", ""])
     lines.append("- 适合先看基础工商主体信息，成本更省。")
     lines.append(f"- 通常包含：{basic_scope}。")
-    lines.extend(["", "## 2. 企业信息核验（2001）", ""])
+    lines.extend(["", "## 2. 企业信息核验", ""])
     lines.append("- 会覆盖基础主体识别信息，并补充更完整的核验字段。")
     lines.append(f"- 相比工商信息，通常额外多出：{enhanced_scope}。")
     lines.append("- 这类查询费用更高，真正执行前我还会再和你确认一次。")
@@ -681,7 +687,7 @@ def format_detail_api_selection_markdown(payload: dict[str, Any]) -> str:
     lines.extend(["", "## 请你确认", ""])
     lines.append("- 回复 `1` 或 `企业工商信息`，表示查询基础工商信息。")
     lines.append("- 回复 `2` 或 `企业信息核验`，表示查询增强核验信息。")
-    lines.append("- 如果你选择 `2001`，我会先说明费用并请你再确认一次。")
+    lines.append("- 如果你选择第 `2` 种，我会先说明费用并请你再确认一次。")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -716,7 +722,7 @@ def format_clarification_markdown(payload: dict[str, Any]) -> str:
 
     lines.extend(["", "## 下一步", ""])
     lines.append("- 你要查哪一家？直接回企业全称或者第几个就行。")
-    lines.append("- 企业确认完成后，我会单独罗列 `企业工商信息` 和 `企业信息核验` 的差异，再让你选择查询哪一种。")
+    lines.append("- 企业确认完成后，我会单独罗列 `1. 企业工商信息` 和 `2. 企业信息核验` 的差异，再让你选择查询哪一种。")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -728,12 +734,12 @@ def build_follow_up_suggestions(report: dict[str, Any]) -> list[str]:
     if detail:
         if detail_api == "410":
             return [
-                "如果你后续还要补充人员规模、参保人数、国标行业、联系方式或更多邮箱，可以改用 2001 企业信息核验再查一次。",
+                "如果你后续还要补充人员规模、参保人数、国标行业、联系方式或更多邮箱，可以改用第 `2` 种查询再查一次。",
                 "如果你要，我也可以下一步继续帮你查其他企业，比如 `小米科技有限责任公司`。",
             ]
         return ["如果你要，我可以下一步继续帮你查其他企业，比如 `小米科技有限责任公司`。"]
     if candidates:
-        return ["请直接回复其中一家候选企业的完整名称，或者直接回第几个；选中后我会继续让你选择 410 或 2001。"]
+        return ["请直接回复其中一家候选企业的完整名称，或者直接回第几个；选中后我会继续让你选择 `1` 或 `2`。"]
     return ["建议补充更准确的企业全称，或改用电话、地址、人名、产品名、经营范围等线索后重试。"]
 
 
@@ -769,7 +775,7 @@ def format_query_report(report: dict[str, Any]) -> str:
     lines.append(f"- 查询诉求：`{report['request']}`")
     lines.append(f"- 是否命中主体详情：{'是' if detail else '否'}")
     if report.get("detail_api"):
-        lines.append(f"- 本次详情接口：`{report['detail_api']}` {DETAIL_API_TITLES[report['detail_api']]}")
+        lines.append(f"- 本次查询类型：{DETAIL_API_TITLES[report['detail_api']]}")
     for warning in report["warnings"]:
         lines.append(f"- {warning}")
     for index, route in enumerate(report["routes"], start=1):
