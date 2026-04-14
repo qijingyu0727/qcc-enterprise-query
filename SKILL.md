@@ -54,7 +54,7 @@ description: Query enterprise information through QCC public APIs 410, 2001, and
 - 用户直接要求增强字段，但还没有明确选 `2001`：
   先返回 `410/2001` 差异说明，并明确推荐 `2001`。
 - 用户已经选择/明确指定 `2001`：
-  再返回“费用较高，是否确认查询”的确认提示。
+  再返回费用确认提示，并要求用户回复 `确认` 后再执行。
 - 用户已明确选 `410`：
   调用 `scripts/registration_details.py`。
 - 用户确认继续执行高价 `2001` 查询：
@@ -84,7 +84,14 @@ description: Query enterprise information through QCC public APIs 410, 2001, and
 - 进入查询类型选择阶段时，要明确告诉用户：
   `410 企业工商信息` 通常包含企业名称、统一社会信用代码、法定代表人、登记状态、成立日期、注册资本、企业类型、注册地址、经营范围、营业期限、登记机关、核准日期、上市状态等。
   `2001 企业信息核验` 在此基础上还可额外补充企业性质、人员规模、参保人数、国标行业、企查查行业、电话、更多电话、邮箱、更多邮箱、网址、曾用名等。
-- 进入 `2001` 确认阶段时，要明确告诉用户：如确认继续，请回复 `确认查询`；如想改查更省的基础工商信息，可回复 `企业工商信息` 或 `1`。
+- 进入 `2001` 确认阶段时，要明确告诉用户：
+  `你选的是企业信息核验。`
+  `这个查询费用较高。`
+  如确认继续，请回复 `确认`；
+  如无需查询参保人数、邮箱电话等信息，可回复 `企业工商信息` 或 `1` 改查基础工商信息。
+- 查询完成后的“后续建议”只能提当前 skill 已支持的能力：
+  可以建议继续查别的企业，或在 `410/2001` 之间切换补充字段；
+  不要提 `股东信息 / 对外投资 / 司法风险 / 历史变更` 等当前未封装能力。
 
 ## 本地命令
 
@@ -133,7 +140,7 @@ python3 /Users/qixiaoc/Code/fit2cloud/QCC-skill/qcc-enterprise-query/scripts/run
 确认继续执行 `2001`：
 
 ```bash
-python3 /Users/qixiaoc/Code/fit2cloud/QCC-skill/qcc-enterprise-query/scripts/run_query.py --company-name "企查查科技股份有限公司" --request "确认查询" --detail-api 2001 --confirm-expensive --original-request "查企业信息"
+python3 /Users/qixiaoc/Code/fit2cloud/QCC-skill/qcc-enterprise-query/scripts/run_query.py --company-name "企查查科技股份有限公司" --request "确认" --detail-api 2001 --confirm-expensive --original-request "查企业信息"
 ```
 
 ## 参考文件

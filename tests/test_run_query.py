@@ -150,7 +150,10 @@ class RunQueryTest(unittest.TestCase):
         self.assertEqual(result["mode"], "expensive_confirmation")
         self.assertEqual(result["detail_api"], "2001")
         self.assertEqual(result["request"], "查企业基本信息")
-        self.assertIn("企业信息核验", result["report_markdown"])
+        self.assertIn("你选的是企业信息核验", result["report_markdown"])
+        self.assertIn("这个查询费用较高", result["report_markdown"])
+        self.assertIn("请直接回复：`确认`", result["report_markdown"])
+        self.assertIn("如果无需查询参保人数、邮箱电话等信息", result["report_markdown"])
 
     def test_numeric_choice_2_with_confirm_expensive_calls_2001(self) -> None:
         basic_result = {
@@ -294,6 +297,11 @@ class RunQueryTest(unittest.TestCase):
         self.assertIn("人员规模：**100-499人**", result["report_markdown"])
         self.assertIn("参保人数：**215**", result["report_markdown"])
         self.assertIn("更多邮箱：**bd@fit2cloud.com**", result["report_markdown"])
+        self.assertIn("我可以下一步继续帮你查其他企业", result["report_markdown"])
+        self.assertNotIn("股东信息", result["report_markdown"])
+        self.assertNotIn("对外投资", result["report_markdown"])
+        self.assertNotIn("司法风险", result["report_markdown"])
+        self.assertNotIn("历史变更", result["report_markdown"])
 
     def test_410_request_for_enhanced_field_adds_warning(self) -> None:
         registration_result = {
@@ -322,7 +330,8 @@ class AgentPromptTest(unittest.TestCase):
         self.assertIn("ask the user for QCC Key and QCC SecretKey", content)
         self.assertIn("persist them into qcc-enterprise-query/.env", content)
         self.assertIn("choose 410 or 2001", content)
-        self.assertIn("confirm again before calling 2001", content)
+        self.assertIn("use this confirmation wording", content)
+        self.assertIn("如果确认继续，请直接回复 确认", content)
         self.assertIn("886", content)
         self.assertIn("Do not skip the 410 or 2001 selection step", content)
         self.assertIn("第二个", content)

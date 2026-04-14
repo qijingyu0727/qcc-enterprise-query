@@ -686,16 +686,15 @@ def format_detail_api_selection_markdown(payload: dict[str, Any]) -> str:
 
 
 def format_expensive_confirmation_markdown(payload: dict[str, Any]) -> str:
-    lines = ["# 查询前再确认一下", "", "你当前准备查询的是 `企业信息核验`。"]
+    lines = ["# 查询前再确认一下", "", "你选的是企业信息核验。"]
     lines.extend(["", "## 当前查询", ""])
     lines.append(f"- 企业：`{payload['company_name']}`")
     lines.append(f"- 诉求：`{payload['request']}`")
     lines.extend(["", "## 费用说明", ""])
-    lines.append("- `企业信息核验` 除基础主体信息外，还会额外返回人员规模、参保人数、国标行业、企业性质、联系方式、更多邮箱等更完整的核验字段。")
-    lines.append("- 由于这类查询费用相对更高，我先和你确认一下，再继续查询。")
+    lines.append("- 这个查询费用较高。")
     lines.extend(["", "## 下一步", ""])
-    lines.append("- 如果你确认继续，请回复：`确认查询`。")
-    lines.append("- 如果你想改查成本更省的基础工商信息，请回复：`企业工商信息` 或 `1`。")
+    lines.append("- 如果确认继续，请直接回复：`确认`。")
+    lines.append("- 如果无需查询参保人数、邮箱电话等信息，可以选择基础工商信息，回复 `企业工商信息` 或 `1` 即可。")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -730,8 +729,9 @@ def build_follow_up_suggestions(report: dict[str, Any]) -> list[str]:
         if detail_api == "410":
             return [
                 "如果你后续还要补充人员规模、参保人数、国标行业、联系方式或更多邮箱，可以改用 2001 企业信息核验再查一次。",
+                "如果你要，我也可以下一步继续帮你查其他企业，比如 `小米科技有限责任公司`。",
             ]
-        return ["如果这不是目标企业，请直接提供更准确的企业全称后重查。"]
+        return ["如果你要，我可以下一步继续帮你查其他企业，比如 `小米科技有限责任公司`。"]
     if candidates:
         return ["请直接回复其中一家候选企业的完整名称，或者直接回第几个；选中后我会继续让你选择 410 或 2001。"]
     return ["建议补充更准确的企业全称，或改用电话、地址、人名、产品名、经营范围等线索后重试。"]
