@@ -32,10 +32,11 @@ def query_fuzzy_search(search_key: str, page_index: int = 1, client: QccOpenApiC
 
 
 def build_table(records: list[dict[str, object]]) -> list[str]:
-    headers = ["企业名称", "法定代表人", "企业状态", "成立日期", "统一社会信用代码"]
+    headers = ["序号", "企业名称", "法定代表人", "企业状态", "成立日期", "统一社会信用代码"]
     lines = ["| " + " | ".join(headers) + " |", "|" + "|".join([" --- "] * len(headers)) + "|"]
-    for item in records[:5]:
-        row = [str(item.get(header, "-") or "-").replace("|", "\\|") for header in headers]
+    for index, item in enumerate(records[:5], start=1):
+        row = [str(index)]
+        row.extend(str(item.get(header, "-") or "-").replace("|", "\\|") for header in headers[1:])
         lines.append("| " + " | ".join(row) + " |")
     return lines
 
@@ -53,6 +54,8 @@ def format_markdown_report(output: dict[str, object]) -> str:
         return "\n".join(lines).rstrip() + "\n"
 
     lines.extend(build_table(results))
+    lines.extend(["", "## 下一步", ""])
+    lines.append("- 你要查哪一家？直接回企业全称或者第几个就行。")
     return "\n".join(lines).rstrip() + "\n"
 
 

@@ -716,7 +716,7 @@ def format_clarification_markdown(payload: dict[str, Any]) -> str:
         lines.append(f"- {warning}")
 
     lines.extend(["", "## 下一步", ""])
-    lines.append("- 请先只回复上面某个候选企业的完整名称。")
+    lines.append("- 你要查哪一家？直接回企业全称或者第几个就行。")
     lines.append("- 企业确认完成后，我会单独罗列 `企业工商信息` 和 `企业信息核验` 的差异，再让你选择查询哪一种。")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -733,16 +733,16 @@ def build_follow_up_suggestions(report: dict[str, Any]) -> list[str]:
             ]
         return ["如果这不是目标企业，请直接提供更准确的企业全称后重查。"]
     if candidates:
-        return ["请直接回复其中一家候选企业的完整名称；确认后我会继续让你选择 410 或 2001。"]
+        return ["请直接回复其中一家候选企业的完整名称，或者直接回第几个；选中后我会继续让你选择 410 或 2001。"]
     return ["建议补充更准确的企业全称，或改用电话、地址、人名、产品名、经营范围等线索后重试。"]
 
 
 def build_candidates_table(records: list[dict[str, Any]]) -> list[str]:
-    headers = ["企业名称", "法定代表人", "企业状态", "成立日期", "统一社会信用代码"]
+    headers = ["序号", "企业名称", "法定代表人", "企业状态", "成立日期", "统一社会信用代码"]
     lines = ["| " + " | ".join(headers) + " |", "|" + "|".join([" --- "] * len(headers)) + "|"]
-    for item in records[:5]:
-        row = []
-        for header in headers:
+    for index, item in enumerate(records[:5], start=1):
+        row = [str(index)]
+        for header in headers[1:]:
             value = compact_text(item.get(header)) or "-"
             row.append(value.replace("|", "\\|"))
         lines.append("| " + " | ".join(row) + " |")

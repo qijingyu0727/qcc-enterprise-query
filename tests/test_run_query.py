@@ -228,9 +228,11 @@ class RunQueryTest(unittest.TestCase):
         self.assertTrue(mock_fuzzy.called)
         self.assertEqual(result["mode"], "clarification")
         self.assertEqual([item["script"] for item in result["routes"]], ["fuzzy_search.py"])
-        self.assertIn("请先只回复上面某个候选企业的完整名称", result["report_markdown"])
+        self.assertIn("你要查哪一家？直接回企业全称或者第几个就行", result["report_markdown"])
         self.assertIn("我会单独罗列 `企业工商信息` 和 `企业信息核验` 的差异", result["report_markdown"])
         self.assertNotIn("回复 `1`", result["report_markdown"])
+        self.assertIn("| 序号 | 企业名称 |", result["report_markdown"])
+        self.assertIn("| 1 | 杭州飞致云信息科技有限公司 |", result["report_markdown"])
 
     def test_confirmed_company_after_fuzzy_flow_still_returns_selection_first(self) -> None:
         result = run_query.execute_query(
@@ -323,6 +325,7 @@ class AgentPromptTest(unittest.TestCase):
         self.assertIn("confirm again before calling 2001", content)
         self.assertIn("886", content)
         self.assertIn("Do not skip the 410 or 2001 selection step", content)
+        self.assertIn("第二个", content)
 
 
 if __name__ == "__main__":
