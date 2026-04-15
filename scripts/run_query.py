@@ -416,10 +416,15 @@ def route_step(script_name: str, output: dict[str, Any], note: str) -> dict[str,
     }
 
 
-def detail_api_display_name(detail_api: str) -> str:
-    if detail_api == "410":
-        return "第1种企业工商信息"
-    return "第2种企业信息核验"
+def is_company_confirmation_follow_up(company_name: str, user_request: str, original_request: str | None) -> bool:
+    if not original_request:
+        return False
+    company = compact_text(company_name)
+    request_text = compact_text(user_request)
+    initial_request = compact_text(original_request)
+    if not company or not request_text or request_text != company:
+        return False
+    return request_text != initial_request
 
 
 def build_empty_detail_result(company_name: str, detail_api: str) -> dict[str, Any]:
@@ -562,12 +567,17 @@ def execute_query(
     explicit_detail_api = infer_requested_detail_api(request_text, detail_api=detail_api)
     is_upgrade_follow_up = is_upgrade_follow_up_request(request_text)
     expensive_confirmed = is_expensive_query_confirmed(request_text, confirm_expensive=confirm_expensive)
+    is_company_follow_up = is_company_confirmation_follow_up(company, request_text, original_request)
     if is_upgrade_follow_up:
         expensive_confirmed = True
     original_explicit_api = infer_requested_detail_api(effective_request)
 
     if not explicit_detail_api and original_explicit_api:
         explicit_detail_api = original_explicit_api
+
+    if is_company_follow_up and (explicit_detail_api == "2001" or original_explicit_api == "2001" or requests_enhanced_verification(effective_request)):
+        explicit_detail_api = "2001"
+        expensive_confirmed = True
 
     if not explicit_detail_api and expensive_confirmed:
         if original_explicit_api == "2001" or requests_enhanced_verification(effective_request) or confirm_expensive:
@@ -580,7 +590,7 @@ def execute_query(
     routes: list[dict[str, Any]] = []
     warnings: list[str] = []
 
-    if should_use_fuzzy_directly(company, effective_request):
+    if not is_company_follow_up and should_use_fuzzy_directly(company, effective_request):
         fuzzy_result = query_fuzzy_search(company, client=api_client)
         routes.append(route_step("fuzzy_search.py", fuzzy_result, "当前输入更像简称或线索关键词，先走企业模糊搜索确认候选企业。"))
         candidates = dedupe_candidates([fuzzy_result])
@@ -628,7 +638,7 @@ def execute_query(
         route_step(
             DETAIL_API_SCRIPT_NAMES[explicit_detail_api],
             detail_result,
-            f"已按你的选择调用{detail_api_display_name(explicit_detail_api)}。",
+            f"已根据你的诉求返回{DETAIL_API_TITLES[explicit_detail_api]}结果。",
         )
     )
 
@@ -688,7 +698,7 @@ def format_capability_markdown() -> str:
     lines.append("- `2. 企业信息核验`：可额外补充人员规模、参保人数、国标行业、联系方式、更多邮箱等增强字段，但费用更高。")
     lines.append("- `3. 企业模糊搜索`：可按企业简称、电话、地址、人名、产品名、经营范围等关键词返回候选企业。")
     lines.extend(["", "## 输入如何路由", ""])
-    lines.append("- 只给了简称、电话、地址或其他线索：先走企业模糊搜索，确认企业全称后，默认先返回基础工商信息。")
+    lines.append("- 只给了简称、电话、地址或其他线索：我会先帮你找到候选企业。确认企业后，再按你的诉求继续查询。")
     lines.append("- 已给出企业全称或统一社会信用代码，且只是泛查询：默认直接返回 `1. 企业工商信息`。")
     lines.append("- 如果还想补人员规模、参保人数、行业、联系方式等信息，可以在基础结果后直接回复 `需要`；这类继续查询可能会消耗较高费用。")
     lines.append("- 用户已明确说“查企业信息核验”，或诉求命中增强字段时：直接进入高价查询确认，确认后再执行。")
@@ -716,7 +726,7 @@ def format_credential_required_markdown(payload: dict[str, Any]) -> str:
 def format_detail_api_selection_markdown(payload: dict[str, Any]) -> str:
     basic_scope = "、".join(payload["basic_scope_fields"])
     enhanced_scope = "、".join(payload["enhanced_extra_fields"])
-    lines = ["# 企业已确认，请继续选择查询内容", "", "这一步先只确认查询类型，我不会把企业确认和详情查询选择放在同一轮一起执行。"]
+    lines = ["# 企业已确认", "", "接下来只差一步：确定这次先看基础信息，还是直接补更完整的信息。"]
     lines.extend(["", "## 当前确认企业", ""])
     lines.append(f"- 企业：`{payload['company_name']}`")
     lines.append(f"- 诉求：`{payload['request']}`")
@@ -759,17 +769,16 @@ def format_clarification_markdown(payload: dict[str, Any]) -> str:
     lines.extend(["", "## 查询说明", ""])
     lines.append(f"- 查询输入：`{payload['company_name']}`")
     lines.append(f"- 查询诉求：`{payload['request']}`")
-    for index, route in enumerate(payload["routes"], start=1):
-        lines.append(
-            f"- 第{index}步：`{route['script']}` -> `{route['api']}`，结果数 {route['result_count']}，说明：{route['note']}"
-        )
     for warning in payload["warnings"]:
         lines.append(f"- {warning}")
 
     lines.extend(["", "## 下一步", ""])
     lines.append("- 你要查哪一家？直接回企业全称或者第几个就行。")
-    lines.append("- 如果你的诉求只是“查企业信息”这类泛查询，企业确认后我会默认先返回基础工商信息。")
-    lines.append("- 如果你本来就想补人员规模、参保人数、行业、联系方式等信息，后面可以继续升级查询；这类结果可能会消耗较高费用。")
+    if requests_enhanced_verification(payload["request"]) or infer_requested_detail_api(payload["request"]) == "2001":
+        lines.append("- 你确认企业后，我会直接继续补充人员规模、参保人数、行业、联系方式等信息。")
+    else:
+        lines.append("- 如果你的诉求只是“查企业信息”这类泛查询，企业确认后我会先返回基础工商信息。")
+    lines.append("- 如果这次要补更完整的信息，查询费用通常会更高。")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -825,12 +834,11 @@ def format_query_report(report: dict[str, Any]) -> str:
         lines.append(f"- 本次查询类型：{DETAIL_API_TITLES[report['detail_api']]}")
     for warning in report["warnings"]:
         lines.append(f"- {warning}")
-    for index, route in enumerate(report["routes"], start=1):
-        lines.append(
-            f"- 第{index}步：`{route['script']}` -> `{route['api']}`，结果数 {route['result_count']}，说明：{route['note']}"
-        )
+    route_notes = [route["note"] for route in report["routes"] if route.get("note")]
+    if route_notes:
+        lines.append(f"- 查询过程：{'；'.join(route_notes)}")
     if not report["warnings"]:
-        lines.append("- 本次查询按既定路由自动选择接口，未发现额外异常。")
+        lines.append("- 本次查询已按你的诉求顺利完成。")
 
     lines.extend(["", "## 后续建议", ""])
     for suggestion in build_follow_up_suggestions(report):
