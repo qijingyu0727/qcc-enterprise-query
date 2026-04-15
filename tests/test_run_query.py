@@ -324,19 +324,8 @@ class RunQueryTest(unittest.TestCase):
         self.assertIn("企查查科技股份有限公司", result["report_markdown"])
         self.assertNotIn("fuzzy_search.py", result["report_markdown"])
 
-    def test_confirmed_company_after_fuzzy_enhanced_request_executes_verify_directly(self) -> None:
-        basic_result = {
-            "api_title": "企业信息核验",
-            "query": {"company_name": "杭州飞致云信息科技有限公司"},
-            "has_result": True,
-            "result": {
-                "企业名称": "杭州飞致云信息科技有限公司",
-                "统一社会信用代码": "91330106311245339J",
-                "人员规模": "100-499人",
-                "参保人数": "215",
-            },
-        }
-        with mock.patch("run_query.query_basic_details", return_value=basic_result) as mock_basic, mock.patch(
+    def test_confirmed_company_after_fuzzy_enhanced_request_requires_expensive_confirmation(self) -> None:
+        with mock.patch("run_query.query_basic_details", side_effect=AssertionError("should not call")), mock.patch(
             "run_query.query_registration_details", side_effect=AssertionError("should not call")
         ):
             result = run_query.execute_query(
@@ -346,25 +335,13 @@ class RunQueryTest(unittest.TestCase):
                 original_request="查一下飞致云的企业信息核验",
             )
 
-        self.assertTrue(mock_basic.called)
-        self.assertEqual(result["mode"], "query")
+        self.assertEqual(result["mode"], "expensive_confirmation")
         self.assertEqual(result["detail_api"], "2001")
-        self.assertIn("人员规模：**100-499人**", result["report_markdown"])
-        self.assertNotIn("这个查询费用较高", result["report_markdown"])
-        self.assertNotIn("basic_details.py", result["report_markdown"])
+        self.assertIn("这个查询费用较高", result["report_markdown"])
+        self.assertIn("是否确认继续查询", result["report_markdown"])
 
-    def test_confirmed_company_after_clue_enhanced_request_executes_verify_directly(self) -> None:
-        basic_result = {
-            "api_title": "企业信息核验",
-            "query": {"company_name": "杭州飞致云信息科技有限公司"},
-            "has_result": True,
-            "result": {
-                "企业名称": "杭州飞致云信息科技有限公司",
-                "电话": "0571-00000000",
-                "邮箱": "info@fit2cloud.com",
-            },
-        }
-        with mock.patch("run_query.query_basic_details", return_value=basic_result) as mock_basic, mock.patch(
+    def test_confirmed_company_after_clue_enhanced_request_requires_expensive_confirmation(self) -> None:
+        with mock.patch("run_query.query_basic_details", side_effect=AssertionError("should not call")), mock.patch(
             "run_query.query_registration_details", side_effect=AssertionError("should not call")
         ):
             result = run_query.execute_query(
@@ -374,9 +351,9 @@ class RunQueryTest(unittest.TestCase):
                 original_request='通过电话“0571-00000000”找企业，并查联系方式',
             )
 
-        self.assertTrue(mock_basic.called)
+        self.assertEqual(result["mode"], "expensive_confirmation")
         self.assertEqual(result["detail_api"], "2001")
-        self.assertIn("电话：**0571-00000000**", result["report_markdown"])
+        self.assertIn("请直接回复：`确认`", result["report_markdown"])
 
     def test_clarification_for_enhanced_request_mentions_direct_enhanced_follow_up(self) -> None:
         fuzzy_result = {
@@ -390,7 +367,7 @@ class RunQueryTest(unittest.TestCase):
             result = run_query.execute_query("飞致云", "查一下飞致云的企业信息核验", client=object())
 
         self.assertEqual(result["mode"], "clarification")
-        self.assertIn("确认企业后，我会直接继续补充人员规模、参保人数、行业、联系方式等信息", result["report_markdown"])
+        self.assertIn("确认企业后，我会先说明这类查询费用较高", result["report_markdown"])
         self.assertNotIn("企业确认后我会先返回基础工商信息", result["report_markdown"])
 
     def test_2001_report_keeps_enhanced_fields(self) -> None:

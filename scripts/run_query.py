@@ -577,7 +577,6 @@ def execute_query(
 
     if is_company_follow_up and (explicit_detail_api == "2001" or original_explicit_api == "2001" or requests_enhanced_verification(effective_request)):
         explicit_detail_api = "2001"
-        expensive_confirmed = True
 
     if not explicit_detail_api and expensive_confirmed:
         if original_explicit_api == "2001" or requests_enhanced_verification(effective_request) or confirm_expensive:
@@ -754,6 +753,7 @@ def format_expensive_confirmation_markdown(payload: dict[str, Any]) -> str:
     lines.append(f"- 诉求：`{payload['request']}`")
     lines.extend(["", "## 费用说明", ""])
     lines.append("- 这个查询费用较高。")
+    lines.append("- 是否确认继续查询？")
     lines.extend(["", "## 下一步", ""])
     lines.append("- 如果确认继续，请直接回复：`确认`。")
     lines.append("- 如果无需查询参保人数、邮箱电话等信息，可以选择基础工商信息，回复 `企业工商信息` 或 `1` 即可。")
@@ -775,7 +775,7 @@ def format_clarification_markdown(payload: dict[str, Any]) -> str:
     lines.extend(["", "## 下一步", ""])
     lines.append("- 你要查哪一家？直接回企业全称或者第几个就行。")
     if requests_enhanced_verification(payload["request"]) or infer_requested_detail_api(payload["request"]) == "2001":
-        lines.append("- 你确认企业后，我会直接继续补充人员规模、参保人数、行业、联系方式等信息。")
+        lines.append("- 你确认企业后，我会先说明这类查询费用较高；你回复 `确认` 后再继续查询。")
     else:
         lines.append("- 如果你的诉求只是“查企业信息”这类泛查询，企业确认后我会先返回基础工商信息。")
     lines.append("- 如果这次要补更完整的信息，查询费用通常会更高。")

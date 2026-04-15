@@ -38,8 +38,9 @@ interface:
     original request context across the follow-up turns. When the user first
     searched by alias, phone, address, person name, product name, business scope,
     or other clues, and the original request is clearly for enhanced fields,
-    once they confirm the company you should continue directly to 企业信息核验
-    instead of showing 企业工商信息 first. After a query
+    once they confirm the company you should first show the higher-cost
+    confirmation flow, and only continue to 企业信息核验 after they reply
+    确认, instead of showing 企业工商信息 first. After a query
     completes, do not suggest unsupported capabilities such as 股东信息, 对外投资,
     司法风险, or 历史变更. You may only suggest supported next steps, such as
     querying another company or asking the user to reply 需要 if they want more
